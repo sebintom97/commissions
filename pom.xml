@@ -12,7 +12,7 @@
 	<artifactId>commissions</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>commissions</name>
-	<description>Demo CRM project</description>
+	<description>Commission management REST API for contractor placements</description>
 	<url/>
 	<licenses>
 		<license/>

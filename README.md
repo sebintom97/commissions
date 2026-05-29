@@ -1,84 +1,99 @@
 # Commission Management System
 
-A comprehensive Spring Boot REST API for managing salesperson commissions on contractor and permanent placements with automatic calculation, revenue recognition, and drawdown management.
+A Spring Boot REST API for managing salesperson commissions in a recruitment/staffing agency.
+When a contractor placement is created, the system automatically calculates multi-step
+financial margins, applies tiered commission rates, generates a 12-month revenue recognition
+schedule, and tracks all payouts through an approval workflow — with a full double-entry ledger
+for audit compliance.
 
-## 🚀 Quick Start
+![Java](https://img.shields.io/badge/Java-17-007396?logo=openjdk)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.7-6DB33F?logo=springboot)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-4169E1?logo=postgresql)
+![Flyway](https://img.shields.io/badge/Flyway-migrations-CC0200?logo=flyway)
+![JWT](https://img.shields.io/badge/Auth-JWT-black)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)
+
+---
+
+## Architecture overview
+
+```
+HTTP Request
+    │
+    ▼
+Controller  (REST endpoint, input validation)
+    │
+    ▼
+Service Interface → ServiceImpl
+    │                    │
+    │              ┌─────┴──────────────────────┐
+    │              │                            │
+    │         Domain Engines              Repository
+    │    (CommissionCalculation,       (Spring Data JPA)
+    │     RevenueRecognition,                  │
+    │     DrawdownEngine)                      ▼
+    │                                     PostgreSQL
+    └──► LedgerService  (writes an immutable audit entry for every financial event)
+```
+
+Key patterns:
+- **Service/interface split** — all business logic behind interfaces, enabling clean unit testing without Spring context
+- **Domain engines** — `CommissionCalculationService`, `RevenueRecognitionEngine`, and `DrawdownEngine` are dedicated components for the complex domain logic, keeping `ServiceImpl` classes focused on orchestration
+- **Flyway versioned migrations** — schema lives alongside code; Hibernate is set to `validate` only, never auto-modifies
+- **DTO/Mapper pattern** — JPA entities never cross the HTTP boundary; request and response shapes are separate classes
+- **Ledger-as-audit-trail** — every financial state change is written as an immutable ledger entry with a typed `entry_type`
+
+---
+
+## How to run locally
 
 ### Prerequisites
 - Java 17+
 - PostgreSQL 12+
 - Maven 3.8+
 
-### Start the Application
+### Option A — Docker (recommended)
 
 ```bash
-# 1. Ensure PostgreSQL is running
-# 2. Start the application
+docker-compose up -d
+./mvnw spring-boot:run
+```
+
+### Option B — Manual setup
+
+```bash
+# 1. Create the database
+psql -U postgres -c "CREATE DATABASE commissions_db;"
+psql -U postgres -c "CREATE USER commissions_user WITH PASSWORD 'password';"
+psql -U postgres -c "GRANT ALL ON DATABASE commissions_db TO commissions_user;"
+
+# 2. Run
 ./mvnw spring-boot:run
 
-# 3. Access Swagger UI
+# 3. Open interactive API docs
 open http://localhost:8080/swagger-ui.html
 ```
 
-## 📚 Documentation
+> `application.properties` contains dev-only placeholder values (password, JWT secret).
+> Override them via environment variables or an `application-local.properties` file (gitignored) for any real deployment.
 
-| Document | Purpose |
-|----------|---------|
-| **[API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)** | **START HERE** - Complete guide to testing all features via Swagger UI |
-| [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) | Technical overview, architecture, and feature list |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment instructions |
-| [DEVELOPMENT_GUIDELINES.md](DEVELOPMENT_GUIDELINES.md) | Code standards and development practices |
+---
 
-## ✨ Key Features
+## API overview
 
-### Automatic Commission Calculation
-- **Tiered Rates**: 15% → 10% → 8% based on contract sequence
-- **Complex Financial Math**: Margins, overheads, load factors automatically computed
-- **Contractor & Permanent**: Different calculation methods for each placement type
+| Group | Endpoints | Purpose |
+|---|---|---|
+| Auth | `POST /api/auth/register`, `POST /api/auth/login` | JWT token issue |
+| Placements | `CRUD /api/placements` | **Core feature** — triggers automatic commission calculation on create |
+| Commission Plans | `CRUD /api/commission-plans` | Tracks per-placement commission lifecycle (PLANNED → CONFIRMED → RECOGNIZED → PAID) |
+| Recognition Schedules | `GET /api/recognition-schedules` | Monthly revenue recognition entries |
+| Drawdowns | `CRUD /api/drawdowns`, `POST .../approve`, `.../reject` | Payout request workflow |
+| Ledger | `GET /api/ledger` | Immutable audit trail of all financial events |
+| Reports | `GET /api/reports/salesperson/{id}/dashboard` | Financial summaries and top-performer rankings |
 
-### Revenue Recognition
-- **12-Month Amortization**: Commissions recognized monthly over time
-- **Automatic Scheduling**: Recognition dates generated on placement creation
-- **Compliance Ready**: Full audit trail with ledger entries
+Full interactive documentation at `/swagger-ui.html` once the server is running.
 
-### Drawdown Management
-- **Available Balance Tracking**: Recognized minus paid amounts
-- **Quarterly Limits**: Configurable payout frequency controls
-- **Approval Workflow**: PENDING → APPROVED → PAID states
-
-### Comprehensive Reporting
-- **Salesperson Dashboards**: Complete financial overview
-- **Period Summaries**: Commission breakdowns by date range
-- **Top Performers**: Leaderboards and rankings
-- **System Health**: Real-time metrics and statistics
-
-### Security
-- **JWT Authentication**: Secure token-based API access
-- **Role-Based Access**: User permissions and authorization
-- **Audit Trail**: Complete ledger of all financial transactions
-
-## 🎯 API Endpoints
-
-### Core Resources
-- `/api/auth/*` - User authentication
-- `/api/salespeople/*` - Salesperson management
-- `/api/clients/*` - Client companies
-- `/api/contractors/*` - Worker management
-- `/api/placements/*` - **Main feature** - Creates placements with auto-calculated commissions
-
-### Financial Management
-- `/api/commission-plans/*` - Commission tracking
-- `/api/recognition-schedules/*` - Revenue recognition
-- `/api/drawdowns/*` - Payout requests
-- `/api/ledger/*` - Transaction audit trail
-
-### Reporting
-- `/api/reports/salesperson/{id}/dashboard` - Complete overview
-- `/api/reports/salesperson/{id}/commissions` - Commission breakdown
-- `/api/reports/top-performers` - Rankings
-- `/api/reports/health` - System metrics
-
-## 💡 Example: Create a Placement
+### Example: create a placement
 
 **POST** `/api/placements`
 
@@ -99,146 +114,115 @@ open http://localhost:8080/swagger-ui.html
 }
 ```
 
-**Response** (auto-calculated):
+The response includes auto-calculated fields:
+
 ```json
 {
   "commissionTotal": 2034.40,
   "commissionPercentage": 15,
   "netAnnualMargin": 13562.64,
-  "sequenceNumber": 1,
-  ...
+  "sequenceNumber": 1
 }
 ```
 
-**Behind the scenes, this automatically:**
-1. ✅ Calculates all financial fields (margins, costs, commission)
-2. ✅ Creates Commission Plan (status: PLANNED)
-3. ✅ Generates 12-month Recognition Schedule
-4. ✅ Records Ledger entries for audit trail
-
-## 🧪 Testing
-
-See **[API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)** for:
-- Step-by-step testing workflows
-- Sample data for all endpoints
-- Expected results and validation
-- 5-minute demo script for client presentations
-
-## 🏗️ Technology Stack
-
-- **Framework**: Spring Boot 3.5.7
-- **Language**: Java 17
-- **Database**: PostgreSQL 12+
-- **Security**: JWT with Spring Security
-- **API Docs**: Swagger/OpenAPI
-- **Build Tool**: Maven
-
-## 📊 Database
-
-- **11 Flyway Migrations**: Version-controlled schema evolution
-- **10 Core Entities**: Fully normalized relational model
-- **Audit Trail**: Every transaction logged in ledger
-- **Optimized Indexes**: Fast queries for reporting
-
-## 🔧 Configuration
-
-Key settings in `application.properties`:
-```properties
-# Database
-spring.datasource.url=jdbc:postgresql://localhost:5432/commissions_db
-spring.datasource.username=commissions_user
-
-# JWT
-jwt.secret=your-secret-key-change-in-production
-jwt.expiration=3600000
-
-# Server
-server.port=8080
-```
-
-## 🚢 Deployment
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on:
-- Database setup
-- Environment configuration
-- Docker deployment
-- Production checklist
-
-## 🐛 Bug Fixes Applied
-
-During testing, the following issues were identified and resolved:
-
-1. ✅ **Missing `updated_at` timestamp** on placement creation
-2. ✅ **Null `plannedAmount`** in revenue recognition schedule
-3. ✅ **Missing dependency injection** for CommissionPlanRepository
-
-All fixes have been tested and validated.
-
-## 📈 System Metrics
-
-Based on current implementation:
-- **Response Time**: < 100ms for CRUD operations
-- **Calculation Accuracy**: BigDecimal precision (no floating-point errors)
-- **Scalability**: Connection pooling (HikariCP) with 10 max connections
-- **Data Integrity**: Full transactional consistency
-
-## 🎓 How It Works
-
-### Commission Calculation Example
-
-**First Contractor Placement:**
-```
-Annual Salary: $60,000
-Bill Rate: $45.50/hour
-
-Step 1: Calculate hourly cost with load factors
-  → $37.31/hour (includes taxes, benefits, overhead)
-
-Step 2: Calculate margin
-  → $45.50 - $37.31 = $8.19/hour profit
-
-Step 3: Annualize
-  → $8.19 × 40 hours × 45 weeks = $14,742 gross margin
-
-Step 4: Apply overheads
-  → 6% admin + 2% insurance = $730.08
-  → Net margin: $13,562.64
-
-Step 5: Apply commission rate
-  → 15% (first contract) of $13,562.64 = $2,034.40
-```
-
-**Second Placement (same contractor, same client):**
-- Commission Rate: **10%** (automatic tier reduction)
-
-**Third Placement:**
-- Commission Rate: **8%** (lowest tier)
-
-## 🎯 MVP Deliverables
-
-✅ **Complete REST API** with 50+ endpoints
-✅ **Automatic Commission Calculation** with tiered rates
-✅ **Revenue Recognition** with 12-month amortization
-✅ **Drawdown Management** with approval workflow
-✅ **Comprehensive Reporting** dashboards and analytics
-✅ **JWT Authentication** for secure access
-✅ **Interactive API Documentation** (Swagger UI)
-✅ **Full Audit Trail** via ledger system
-✅ **Testing Guide** for client validation
-
-## 📝 License
-
-Internal project - All rights reserved
-
-## 👥 Support
-
-For questions, issues, or enhancements:
-- Review the documentation in this repository
-- Check the interactive API docs at `/swagger-ui.html`
-- Contact the development team
+Behind the scenes, a single `POST /api/placements` call:
+1. Calculates all financial fields (margins, load costs, commission)
+2. Creates a Commission Plan (status: `PLANNED`)
+3. Generates a 12-month Recognition Schedule
+4. Writes the opening Ledger entry
 
 ---
 
-**Status**: ✅ Production Ready
-**Version**: 1.0
-**Last Updated**: 2025-11-13
+## Key technical decisions
+
+**BigDecimal for all financial math**
+All monetary values use `BigDecimal` with explicit `RoundingMode.HALF_UP` and a 2-decimal scale at output boundaries. This avoids the floating-point rounding errors that would compound across the multi-step commission calculation (salary → hourly cost → margin → annualised → net → commission).
+
+**Flyway over Hibernate DDL auto**
+`spring.jpa.hibernate.ddl-auto=validate` — Hibernate only validates the schema, never modifies it. All schema changes go through versioned Flyway scripts (`V1__` through `V11__`), giving a reproducible migration path that is safe to run against a production database.
+
+**Revenue recognition as a first-class engine**
+Rather than storing a single payout date, commissions are amortised over 12 months into a `recognition_schedule` table. This matches how recruitment agencies actually account for contractor revenue and makes the `DrawdownEngine` straightforward: available balance = `sum(recognized) − sum(paid)`.
+
+**Service interface + impl split**
+Every service has a `FooService` interface and a `FooServiceImpl`. This decouples controllers from implementation details, makes mocking trivial in unit tests, and is a convention expected in enterprise Java teams.
+
+**CORS open for dev; restrict per environment**
+`corsConfigurationSource()` allows all origins in the default profile. Restrict `allowedOrigins` to your frontend URL in `application-prod.properties`.
+
+---
+
+## Commission calculation walkthrough
+
+```
+Input:  Annual salary €60,000 | Bill rate €45.50/hr | 40 hrs/week | 45 weeks/year
+
+Step 1 — Hourly pay cost with load factors
+  Base:  €60,000 ÷ 52 ÷ 40      = €28.85/hr
+  Leave (14.54%):  × 1.1454      = €33.05/hr
+  PRSI  (11.25%):  × 1.1125      = €36.77/hr
+  Pension (1.5%):  × 1.015       = €37.32/hr  ← hourlyPayCost
+
+Step 2 — Margin per hour
+  €45.50 − €37.32                = €8.18/hr
+
+Step 3 — Weekly margin
+  €8.18 × 40 hrs                 = €327.20/week
+
+Step 4 — Gross annual margin
+  €327.20 × 45 weeks             = €14,724.00
+
+Step 5 — Net annual margin (after overheads)
+  Admin (6%):  −€883.44
+  Insurance (2%):  −€294.48
+  Net margin                     = €13,546.08
+
+Step 6 — Commission (first contract = 15%)
+  €13,546.08 × 15%               = €2,031.91  ← commissionTotal
+```
+
+Second placement (same contractor, same client) → **10%**. Third and beyond → **8%**.
+
+---
+
+## Running tests
+
+```bash
+./mvnw test
+```
+
+- `CommissionCalculationServiceTest` — unit tests validating financial math against known values (no Spring context needed)
+- `PlacementServiceIntegrationTest` — full `@SpringBootTest` integration test for the placement creation flow
+- `AuthIntegrationTest` — register/login/token round-trip
+- `ReportingServiceIntegrationTest` — dashboard and period summary assertions
+
+---
+
+## Deployment
+
+`application-prod.properties` is the production profile. All sensitive values are injected via environment variables:
+
+```bash
+./mvnw package -DskipTests
+
+java -Dspring.profiles.active=prod \
+     -DDB_URL=jdbc:postgresql://your-host:5432/commissions_db \
+     -DDB_USERNAME=commissions_user \
+     -DDB_PASSWORD=your-db-password \
+     -DJWT_SECRET=your-strong-secret-min-32-chars \
+     -jar target/commissions-0.0.1-SNAPSHOT.jar
+```
+
+See [`docker-compose.yml`](docker-compose.yml) for a containerised setup.
+
+---
+
+## Screenshots
+
+_Add screenshots of the Swagger UI here._
+
+---
+
+## License
+
+MIT

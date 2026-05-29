@@ -7,6 +7,7 @@ target/
 *.war
 *.ear
 *.log
+logs/
 .env
 .DS_Store
 node_modules/
@@ -17,3 +18,4 @@ npm-debug.log*
 .gradle/
 build/
 claude.md
+application-local.properties
