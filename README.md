@@ -198,31 +198,6 @@ Second placement (same contractor, same client) â†’ **10%**. Third and beyond â†
 
 ---
 
-## Deployment
-
-`application-prod.properties` is the production profile. All sensitive values are injected via environment variables:
-
-```bash
-./mvnw package -DskipTests
-
-java -Dspring.profiles.active=prod \
-     -DDB_URL=jdbc:postgresql://your-host:5432/commissions_db \
-     -DDB_USERNAME=commissions_user \
-     -DDB_PASSWORD=your-db-password \
-     -DJWT_SECRET=your-strong-secret-min-32-chars \
-     -jar target/commissions-0.0.1-SNAPSHOT.jar
-```
-
-See [`docker-compose.yml`](docker-compose.yml) for a containerised setup.
-
----
-
-## Screenshots
-
-_Add screenshots of the Swagger UI here._
-
----
-
 ## License
 
 MIT
